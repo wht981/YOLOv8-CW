@@ -30,8 +30,8 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from ultralytics.utils import LINUX, LOGGER, MACOS
-from ultralytics.utils.tqdm import TQDM
+from src.utils import LINUX, LOGGER, MACOS
+from src.utils.tqdm import TQDM
 
 os.environ["JUPYTER_PLATFORM_DIRS"] = "1"  # fix DeprecationWarning: Jupyter is migrating to use standard platformdirs
 DOCS = Path(__file__).parent.resolve()
