@@ -21,9 +21,5 @@ if __name__ == '__main__':
         data='VisDrone.yaml',  # 指向你之前配置好的数据集 yaml
         epochs=100,               # 轮数
         imgsz=1280,                # 图像大小
-        batch=8,                  # 批次
-        workers=0,                # Windows 必须为 0
-        device='0',               # 显卡
         project='runs/train',     # 保存路径
-        amp=False                 # 如果遇到显存溢出或报错，可以尝试设为 False
     )
