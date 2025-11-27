@@ -33,8 +33,8 @@ download: |
   from pathlib import Path
   import shutil
 
-  from ultralytics.utils.downloads import download
-  from ultralytics.utils import ASSETS_URL, TQDM
+  from src.utils.downloads import download
+  from src.utils import ASSETS_URL, TQDM
 
 
   def visdrone2yolo(dir, split, source_name=None):

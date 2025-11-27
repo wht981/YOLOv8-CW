@@ -16,7 +16,7 @@ from src.utils.downloads import download
 
 settings = SETTINGS
 
-MODELS = ("YOLO", "YOLOWorld", "YOLOE", "NAS", "SAM", "FastSAM", "RTDETR")
+MODELS = ("YOLO", "YOLOWorld", "YOLOE", "RTDETR")
 
 __all__ = (
     "__version__",
@@ -29,13 +29,13 @@ __all__ = (
 
 if TYPE_CHECKING:
     # Enable hints for type checkers
-    from src.models import YOLO, YOLOWorld, YOLOE, NAS, SAM, FastSAM, RTDETR  # noqa
+    from src.models import YOLO, YOLOWorld, YOLOE, RTDETR  # noqa
 
 
 def __getattr__(name: str):
     """Lazy-import model classes on first access."""
     if name in MODELS:
-        return getattr(importlib.import_module("ultralytics.models"), name)
+        return getattr(importlib.import_module("src.models"), name)
     raise AttributeError(f"module {__name__} has no attribute {name}")
 
 
