@@ -20,6 +20,7 @@ if __name__ == '__main__':
     model.train(
         data='VisDrone.yaml',  # 指向你之前配置好的数据集 yaml
         epochs=100,               # 轮数
-        imgsz=1280,                # 图像大小
+        imgsz=640,                # 图像大小
         project='runs/train',     # 保存路径
+        workers=0,                # 多线程数
     )
