@@ -22,5 +22,5 @@ if __name__ == '__main__':
         epochs=100,               # 轮数
         imgsz=640,                # 图像大小
         project='runs/train',     # 保存路径
-        workers=0,                # 多线程数
+        amp=True,
     )
