@@ -68,6 +68,9 @@ from src.nn.modules import (
     YOLOEDetect,
     YOLOESegment,
     v10Detect,
+    C2f_ESEMB,
+    C2f_Faster,
+    C3_Faster,
 )
 from src.utils import DEFAULT_CFG_DICT, LOGGER, YAML, colorstr, emojis
 from src.utils.checks import check_requirements, check_suffix, check_yaml
@@ -1553,6 +1556,9 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
+            C2f_ESEMB,
+            C2f_Faster,
+            C3_Faster,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1572,6 +1578,9 @@ def parse_model(d, ch, verbose=True):
             C2fCIB,
             C2PSA,
             A2C2f,
+            C2f_ESEMB,
+            C2f_Faster,
+            C3_Faster,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
