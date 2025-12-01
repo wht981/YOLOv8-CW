@@ -11,7 +11,7 @@ from timm.layers import DropPath
 from src.utils.torch_utils import fuse_conv_and_bn
 
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad, MBConv, Partial_conv3
-from .transformer import TransformerBlock
+from .transformer import TransformerBlock, CLLA
 
 __all__ = (
     "C1",
@@ -56,7 +56,22 @@ __all__ = (
     "C2f_ESEMB",
     "C2f_Faster",
     "C3_Faster",
+    "CLLABlock",
 )
+
+
+class CLLABlock(nn.Module):
+    def __init__(self, range_, c_dim, ch1, ch2, out):
+        super().__init__()
+        self.conv1 = nn.Conv2d(ch1, c_dim, 1)
+        self.conv2 = nn.Conv2d(ch2, c_dim, 1)
+        self.fuse = nn.Conv2d(c_dim * 2, out, 1)
+
+    def forward(self, x1, x2):
+        y1 = self.conv1(x1)
+        y2 = self.conv2(x2)
+        y = torch.cat([y1, y2], dim=1)
+        return self.fuse(y)
 
 
 class Faster_Block(nn.Module):

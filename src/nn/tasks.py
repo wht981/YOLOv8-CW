@@ -71,6 +71,7 @@ from src.nn.modules import (
     C2f_ESEMB,
     C2f_Faster,
     C3_Faster,
+    CLLADetect,
 )
 from src.utils import DEFAULT_CFG_DICT, LOGGER, YAML, colorstr, emojis
 from src.utils.checks import check_requirements, check_suffix, check_yaml
@@ -1633,7 +1634,7 @@ def parse_model(d, ch, verbose=True):
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
         elif m in frozenset(
-            {Detect, WorldDetect, YOLOEDetect, Segment, YOLOESegment, Pose, OBB, ImagePoolingAttn, v10Detect}
+            {Detect, WorldDetect, YOLOEDetect, Segment, YOLOESegment, Pose, OBB, ImagePoolingAttn, v10Detect, CLLADetect}
         ):
             args.append([ch[x] for x in f])
             if m is Segment or m is YOLOESegment:
