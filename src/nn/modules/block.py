@@ -130,7 +130,6 @@ class Faster_Block(nn.Module):
             self.layer_scale.unsqueeze(-1).unsqueeze(-1) * self.mlp(x))
         return x
     "ACmix",
-)
 
 
 class ACmix(nn.Module):
