@@ -64,6 +64,8 @@ from .block import (
     C2f_ESEMB,
     C2f_Faster,
     C3_Faster,
+    CLLABlock,
+    ACmix,
 )
 from .conv import (
     CBAM,
@@ -94,6 +96,7 @@ from .head import (
     YOLOEDetect,
     YOLOESegment,
     v10Detect,
+    CLLADetect,
 )
 from .transformer import (
     AIFI,
@@ -106,6 +109,7 @@ from .transformer import (
     TransformerBlock,
     TransformerEncoderLayer,
     TransformerLayer,
+    CLLA,
 )
 
 __all__ = (
@@ -185,4 +189,6 @@ __all__ = (
     "YOLOEDetect",
     "YOLOESegment",
     "v10Detect",
+    "CLLADetect",
+    "ACmix",
 )

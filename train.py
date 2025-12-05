@@ -3,6 +3,12 @@ import src
 # 2. 从 src 导入 YOLO
 from src import YOLO
 
+
+import torch
+torch.cuda.empty_cache()
+torch.cuda.reset_peak_memory_stats()
+
+
 if __name__ == '__main__':
 
     # =========================================================

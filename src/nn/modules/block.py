@@ -11,7 +11,7 @@ from timm.layers import DropPath
 from src.utils.torch_utils import fuse_conv_and_bn
 
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad, MBConv, Partial_conv3
-from .transformer import TransformerBlock
+from .transformer import TransformerBlock, CLLA
 
 __all__ = (
     "C1",
@@ -56,7 +56,22 @@ __all__ = (
     "C2f_ESEMB",
     "C2f_Faster",
     "C3_Faster",
+    "CLLABlock",
 )
+
+
+class CLLABlock(nn.Module):
+    def __init__(self, range_, c_dim, ch1, ch2, out):
+        super().__init__()
+        self.conv1 = nn.Conv2d(ch1, c_dim, 1)
+        self.conv2 = nn.Conv2d(ch2, c_dim, 1)
+        self.fuse = nn.Conv2d(c_dim * 2, out, 1)
+
+    def forward(self, x1, x2):
+        y1 = self.conv1(x1)
+        y2 = self.conv2(x2)
+        y = torch.cat([y1, y2], dim=1)
+        return self.fuse(y)
 
 
 class Faster_Block(nn.Module):
@@ -114,6 +129,37 @@ class Faster_Block(nn.Module):
         x = shortcut + self.drop_path(
             self.layer_scale.unsqueeze(-1).unsqueeze(-1) * self.mlp(x))
         return x
+    "ACmix",
+)
+
+
+class ACmix(nn.Module):
+    def __init__(self, c_in, c_out=None, heads=4):
+        super().__init__()
+        c_out = c_out or c_in
+        self.heads = heads
+        self.dk = c_out // heads
+
+        # CNN branch
+        self.conv = nn.Conv2d(c_in, c_out, kernel_size=3, padding=1)
+
+        # Attention branch
+        self.qkv = nn.Conv2d(c_in, c_out * 3, 1)
+        self.proj = nn.Conv2d(c_out, c_out, 1)
+
+    def forward(self, x):
+        cnn_out = self.conv(x)
+
+        B, C, H, W = cnn_out.shape
+        q, k, v = self.qkv(x).reshape(B, 3, self.heads, self.dk, H * W).unbind(1)
+
+        att = torch.softmax(q.transpose(-1, -2) @ k / (self.dk ** 0.5), dim=-1)
+        att_out = (att @ v.transpose(-1, -2)).transpose(-1, -2)
+        att_out = att_out.reshape(B, C, H, W)
+
+        att_out = self.proj(att_out)
+
+        return cnn_out + att_out
 
 
 class DFL(nn.Module):
