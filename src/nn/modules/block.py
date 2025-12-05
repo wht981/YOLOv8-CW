@@ -52,7 +52,37 @@ __all__ = (
     "ResNetLayer",
     "SCDown",
     "TorchVision",
+    "ACmix",
 )
+
+
+class ACmix(nn.Module):
+    def __init__(self, c_in, c_out=None, heads=4):
+        super().__init__()
+        c_out = c_out or c_in
+        self.heads = heads
+        self.dk = c_out // heads
+
+        # CNN branch
+        self.conv = nn.Conv2d(c_in, c_out, kernel_size=3, padding=1)
+
+        # Attention branch
+        self.qkv = nn.Conv2d(c_in, c_out * 3, 1)
+        self.proj = nn.Conv2d(c_out, c_out, 1)
+
+    def forward(self, x):
+        cnn_out = self.conv(x)
+
+        B, C, H, W = cnn_out.shape
+        q, k, v = self.qkv(x).reshape(B, 3, self.heads, self.dk, H * W).unbind(1)
+
+        att = torch.softmax(q.transpose(-1, -2) @ k / (self.dk ** 0.5), dim=-1)
+        att_out = (att @ v.transpose(-1, -2)).transpose(-1, -2)
+        att_out = att_out.reshape(B, C, H, W)
+
+        att_out = self.proj(att_out)
+
+        return cnn_out + att_out
 
 
 class DFL(nn.Module):

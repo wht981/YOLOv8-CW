@@ -3,6 +3,12 @@ import src
 # 2. 从 src 导入 YOLO
 from src import YOLO
 
+
+import torch
+torch.cuda.empty_cache()
+torch.cuda.reset_peak_memory_stats()
+
+
 if __name__ == '__main__':
 
     # =========================================================
@@ -10,7 +16,7 @@ if __name__ == '__main__':
     # =========================================================
     # 这会根据 yaml 里的结构搭建网络，并使用【随机权重】初始化
     # 此时模型是一张白纸，没有之前的训练记忆
-    model = YOLO('yolov8-rtdetr.yaml', task='detect') 
+    model = YOLO('yolov8-ACmix.yaml', task='detect') 
 
     # 【可选技巧】如果你没改网络结构，只是想用 yaml 的配置，但又想用预训练权重加速：
     # model = YOLO('my_yolov8.yaml').load('yolov8n.pt') 
