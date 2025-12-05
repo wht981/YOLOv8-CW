@@ -105,6 +105,88 @@ class DFLoss(nn.Module):
         ).mean(-1, keepdim=True)
 
 
+class BboxLossWasserstein(nn.Module):
+    """Criterion class for computing training losses for bounding boxes."""
+    def __init__(self, reg_max: int = 16):
+        """Initialize the BboxLoss module with regularization maximum and DFL settings."""
+        super().__init__()
+        self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
+
+    # ------------------ 【新增】NWD Loss 方法 ------------------
+    def wasserstein_loss(self, pred, target, eps=1e-7, constant=12.8):
+        """
+        NWD (Normalized Wasserstein Distance) 计算方法
+        pred, target: [x1, y1, x2, y2]
+        constant: NWD 的敏感度系数，VisDrone 推荐 12.8 左右
+        """
+        b1_x1, b1_y1, b1_x2, b1_y2 = pred.chunk(4, -1)
+        b2_x1, b2_y1, b2_x2, b2_y2 = target.chunk(4, -1)
+
+        # 计算宽、高
+        w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1
+        w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1
+
+        # 计算中心点
+        center_x1, center_y1 = (b1_x1 + b1_x2) / 2, (b1_y1 + b1_y2) / 2
+        center_x2, center_y2 = (b2_x1 + b2_x2) / 2, (b2_y1 + b2_y2) / 2
+
+        # Wasserstein 距离 (L2 范数)
+        wh_dist = ((w1 - w2) ** 2 + (h1 - h2) ** 2) / 4
+        center_dist = (center_x1 - center_x2) ** 2 + (center_y1 - center_y2) ** 2
+
+        wasserstein_2 = center_dist + wh_dist
+
+        # 归一化 (0~1 之间，越接近 1 越相似)
+        return torch.exp(-torch.sqrt(wasserstein_2 + eps) / constant)
+    # ---------------------------------------------------------
+
+    def forward(
+        self,
+        pred_dist: torch.Tensor,
+        pred_bboxes: torch.Tensor,
+        anchor_points: torch.Tensor,
+        target_bboxes: torch.Tensor,
+        target_scores: torch.Tensor,
+        target_scores_sum: torch.Tensor,
+        fg_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+
+        # --------- 验证代码 Start ---------
+        if not hasattr(self, 'has_printed_v8_check'):
+            print("\n" + "="*50)
+            print("成功！正在使用改进后的 NWD/WIoU Loss 代码！")
+            print("="*50 + "\n")
+            self.has_printed_v8_check = True
+        # --------- 验证代码 End ---------
+
+        """Compute IoU and DFL losses for bounding boxes."""
+        weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
+
+        # 计算原始 CIoU
+        iou = bbox_iou(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
+
+        # ------------------ 【修改】调用类内部的 NWD 方法 ------------------
+        # 调用 self.wasserstein_loss
+        nwd = self.wasserstein_loss(pred_bboxes[fg_mask], target_bboxes[fg_mask])
+
+        # 【策略】混合 Loss (CIoU + NWD)
+        # alpha = 0.5 表示两者权重相等。
+        # 对于极小目标很多的 VisDrone，有时甚至可以设 alpha = 0.3 (即更偏重 NWD)
+        alpha = 0.5
+        combined_metric = alpha * iou + (1 - alpha) * nwd
+
+        loss_iou = ((1.0 - combined_metric) * weight).sum() / target_scores_sum
+        # ---------------------------------------------------------------
+
+        # DFL loss
+        if self.dfl_loss:
+            target_ltrb = bbox2dist(anchor_points, target_bboxes, self.dfl_loss.reg_max - 1)
+            loss_dfl = self.dfl_loss(pred_dist[fg_mask].view(-1, self.dfl_loss.reg_max), target_ltrb[fg_mask]) * weight
+            loss_dfl = loss_dfl.sum() / target_scores_sum
+        else:
+            loss_dfl = torch.tensor(0.0).to(pred_dist.device)
+        return loss_iou, loss_dfl
+
 class BboxLoss(nn.Module):
     """Criterion class for computing training losses for bounding boxes."""
 
