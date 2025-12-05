@@ -65,6 +65,7 @@ from .block import (
     C2f_Faster,
     C3_Faster,
     CLLABlock,
+    ACmix,
 )
 from .conv import (
     CBAM,
@@ -189,4 +190,5 @@ __all__ = (
     "YOLOESegment",
     "v10Detect",
     "CLLADetect",
+    "ACmix",
 )

@@ -72,6 +72,7 @@ from src.nn.modules import (
     C2f_Faster,
     C3_Faster,
     CLLADetect,
+    ACmix,
 )
 from src.utils import DEFAULT_CFG_DICT, LOGGER, YAML, colorstr, emojis
 from src.utils.checks import check_requirements, check_suffix, check_yaml
@@ -1560,6 +1561,7 @@ def parse_model(d, ch, verbose=True):
             C2f_ESEMB,
             C2f_Faster,
             C3_Faster,
+            ACmix,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1582,6 +1584,7 @@ def parse_model(d, ch, verbose=True):
             C2f_ESEMB,
             C2f_Faster,
             C3_Faster,
+            ACmix,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
