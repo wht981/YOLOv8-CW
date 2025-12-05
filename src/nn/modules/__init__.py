@@ -17,6 +17,8 @@ Examples:
     >>> subprocess.run(f"onnxslim {f} {f} && open {f}", shell=True, check=True)  # pip install onnxslim
 """
 
+
+
 from .block import (
     C1,
     C2,
@@ -59,6 +61,10 @@ from .block import (
     ResNetLayer,
     SCDown,
     TorchVision,
+    C2f_ESEMB,
+    C2f_Faster,
+    C3_Faster,
+    CLLABlock,
     ACmix,
 )
 from .conv import (
@@ -76,6 +82,7 @@ from .conv import (
     LightConv,
     RepConv,
     SpatialAttention,
+    Partial_conv3,
 )
 from .head import (
     OBB,
@@ -89,6 +96,7 @@ from .head import (
     YOLOEDetect,
     YOLOESegment,
     v10Detect,
+    CLLADetect,
 )
 from .transformer import (
     AIFI,
@@ -101,6 +109,7 @@ from .transformer import (
     TransformerBlock,
     TransformerEncoderLayer,
     TransformerLayer,
+    CLLA,
 )
 
 __all__ = (
@@ -180,5 +189,6 @@ __all__ = (
     "YOLOEDetect",
     "YOLOESegment",
     "v10Detect",
+    "CLLADetect",
     "ACmix",
 )

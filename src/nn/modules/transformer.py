@@ -26,8 +26,76 @@ __all__ = (
     "TransformerBlock",
     "TransformerEncoderLayer",
     "TransformerLayer",
+    "CLLA",
 )
 
+
+class CLLA(nn.Module):
+    def __init__(self, range_, c):
+        """
+        range_: receptive field range (int)
+        c: feature channel used for q/k/v (int)
+        """
+        super().__init__()
+        self.c_ = c
+        self.q = nn.Linear(self.c_, self.c_)
+        self.k = nn.Linear(self.c_, self.c_)
+        self.v = nn.Linear(self.c_, self.c_)
+        self.range = int(range_)
+        self.attend = nn.Softmax(dim=-1)
+
+    def forward(self, x1, x2):
+        """
+        x1: (B, C, H1, W1) 低层（更高分辨率）
+        x2: (B, C, H2, W2) 高层（更低分辨率）
+        返回： (B, C, H2, W2) （与 x2 对齐）
+        """
+        b1, c1, h1, w1 = x1.shape
+        b2, c2, h2, w2 = x2.shape
+        assert b1 == b2 and c1 == c2, f"CLLA 输入通道/批次不匹配: x1 {x1.shape}, x2 {x2.shape}"
+
+        # prepare x2 for querying: (B, H2, W2, 1, C)
+        x2_ = x2.permute(0, 2, 3, 1).contiguous().unsqueeze(3)  # (B,H2,W2,1,C)
+
+        # pad x1 so sliding windows works
+        pad = max(int(self.range // 2 - 1), 0)
+        if pad > 0:
+            padding = nn.ZeroPad2d(padding=(pad, pad, pad, pad))
+            x1p = padding(x1)
+        else:
+            x1p = x1
+
+        # build local patches from x1p
+        local = []
+        # stride=2 sampling used in your original code; keep same semantics.
+        for i in range(self.range):
+            for j in range(self.range):
+                tem = x1p[..., i::2, j::2]  # sample pattern
+                # only keep top-left region of size (H2,W2)
+                tem = tem[..., :h2, :w2].contiguous().unsqueeze(3)  # (B,C,H2,W2,1)
+                local.append(tem)
+        # concat along patch dimension -> (B, C, H2, W2, patches)
+        local = torch.cat(local, dim=3)  # (B, C, H2, W2, P)
+        # permute to (B, H2, W2, P, C) for linear layers
+        x1_local = local.permute(0, 2, 3, 4, 1)  # (B,H2,W2,P,C)
+
+        # apply q/k/v: q from x2_, k/v from x1_local
+        q = self.q(x2_)  # (B,H2,W2,1,C)
+        k = self.k(x1_local)  # (B,H2,W2,P,C)
+        v = self.v(x1_local)  # (B,H2,W2,P,C)
+
+        # dot product: (B,H2,W2,P)
+        dots = torch.sum(q * k / math.sqrt(self.c_), dim=-1)  # scaling by sqrt(d)
+        # original code did a weird "irr" transform - keep it but make it robust
+        irr = torch.mean(dots, dim=3, keepdim=True) * 2 - dots  # (B,H2,W2,P)
+        att = self.attend(irr)  # (B,H2,W2,P)
+
+        # weighted sum over value: (B,H2,W2,C)
+        out = (v * att.unsqueeze(-1)).sum(dim=3)  # sum over P
+        out = out.permute(0, 3, 1, 2).contiguous()  # (B,C,H2,W2)
+
+        # residual with x2 (both have same shape)
+        return (out + x2) / 2.0
 
 class TransformerEncoderLayer(nn.Module):
     """A single layer of the transformer encoder.

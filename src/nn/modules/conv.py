@@ -24,6 +24,7 @@ __all__ = (
     "LightConv",
     "RepConv",
     "SpatialAttention",
+    "Partialconv3",
 )
 
 
@@ -34,6 +35,71 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
+
+class EffectiveSEModule(nn.Module):
+    """
+    A lightweight SE module variant designed for efficiency.
+    This module:
+      - Performs global average pooling
+      - Uses a 1x1 conv instead of FC to reduce params
+    """
+    def __init__(self, channels, reduction=4):
+        super().__init__()
+        hidden = max(channels // reduction, 4)
+
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Conv2d(channels, hidden, 1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden, channels, 1, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        w = self.avg_pool(x)
+        w = self.fc(w)
+        return x * w
+
+class MBConv(nn.Module):
+    def __init__(self, inc, ouc, shortcut=True, e=4, dropout=0.1) -> None:
+        super().__init__()
+        midc = inc * e
+        self.conv_pw_1 = Conv(inc, midc, 1)
+        self.conv_dw_1 = Conv(midc, midc, 3, g=midc)
+        self.effective_se = EffectiveSEModule(midc)
+        self.conv1 = Conv(midc, ouc, 1, act=False)
+        self.dropout = nn.Dropout2d(p=dropout)
+        self.add = shortcut and inc == ouc
+    
+    def forward(self, x):
+        return x + self.dropout(self.conv1(self.effective_se(self.conv_dw_1(self.conv_pw_1(x))))) if self.add else self.dropout(self.conv1(self.effective_se(self.conv_dw_1(self.conv_pw_1(x)))))
+
+class Partial_conv3(nn.Module):
+    def __init__(self, dim, n_div=4, forward='split_cat'):
+        super().__init__()
+        self.dim_conv3 = dim // n_div
+        self.dim_untouched = dim - self.dim_conv3
+        self.partial_conv3 = nn.Conv2d(self.dim_conv3, self.dim_conv3, 3, 1, 1, bias=False)
+
+        if forward == 'slicing':
+            self.forward = self.forward_slicing
+        elif forward == 'split_cat':
+            self.forward = self.forward_split_cat
+        else:
+            raise NotImplementedError
+
+    def forward_slicing(self, x):
+        # only for inference
+        x = x.clone()   # !!! Keep the original input intact for the residual connection later
+        x[:, :self.dim_conv3, :, :] = self.partial_conv3(x[:, :self.dim_conv3, :, :])
+        return x
+
+    def forward_split_cat(self, x):
+        # for training/inference
+        x1, x2 = torch.split(x, [self.dim_conv3, self.dim_untouched], dim=1)
+        x1 = self.partial_conv3(x1)
+        x = torch.cat((x1, x2), 1)
+        return x
 
 
 class Conv(nn.Module):

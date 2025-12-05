@@ -6,11 +6,12 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from timm.layers import DropPath
 
 from src.utils.torch_utils import fuse_conv_and_bn
 
-from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
-from .transformer import TransformerBlock
+from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad, MBConv, Partial_conv3
+from .transformer import TransformerBlock, CLLA
 
 __all__ = (
     "C1",
@@ -52,6 +53,82 @@ __all__ = (
     "ResNetLayer",
     "SCDown",
     "TorchVision",
+    "C2f_ESEMB",
+    "C2f_Faster",
+    "C3_Faster",
+    "CLLABlock",
+)
+
+
+class CLLABlock(nn.Module):
+    def __init__(self, range_, c_dim, ch1, ch2, out):
+        super().__init__()
+        self.conv1 = nn.Conv2d(ch1, c_dim, 1)
+        self.conv2 = nn.Conv2d(ch2, c_dim, 1)
+        self.fuse = nn.Conv2d(c_dim * 2, out, 1)
+
+    def forward(self, x1, x2):
+        y1 = self.conv1(x1)
+        y2 = self.conv2(x2)
+        y = torch.cat([y1, y2], dim=1)
+        return self.fuse(y)
+
+
+class Faster_Block(nn.Module):
+    def __init__(self,
+                 inc,
+                 dim,
+                 n_div=4,
+                 mlp_ratio=2,
+                 drop_path=0.1,
+                 layer_scale_init_value=0.0,
+                 pconv_fw_type='split_cat'
+                 ):
+        super().__init__()
+        self.dim = dim
+        self.mlp_ratio = mlp_ratio
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.n_div = n_div
+
+        mlp_hidden_dim = int(dim * mlp_ratio)
+
+        mlp_layer = [
+            Conv(dim, mlp_hidden_dim, 1),
+            nn.Conv2d(mlp_hidden_dim, dim, 1, bias=False)
+        ]
+
+        self.mlp = nn.Sequential(*mlp_layer)
+
+        self.spatial_mixing = Partial_conv3(
+            dim,
+            n_div,
+            pconv_fw_type
+        )
+        
+        self.adjust_channel = None
+        if inc != dim:
+            self.adjust_channel = Conv(inc, dim, 1)
+
+        if layer_scale_init_value > 0:
+            self.layer_scale = nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.forward = self.forward_layer_scale
+        else:
+            self.forward = self.forward
+
+    def forward(self, x):
+        if self.adjust_channel is not None:
+            x = self.adjust_channel(x)
+        shortcut = x
+        x = self.spatial_mixing(x)
+        x = shortcut + self.drop_path(self.mlp(x))
+        return x
+
+    def forward_layer_scale(self, x):
+        shortcut = x
+        x = self.spatial_mixing(x)
+        x = shortcut + self.drop_path(
+            self.layer_scale.unsqueeze(-1).unsqueeze(-1) * self.mlp(x))
+        return x
     "ACmix",
 )
 
@@ -368,6 +445,25 @@ class C3(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the CSP bottleneck with 3 convolutions."""
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+
+
+class C3_Faster(C3):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+        super().__init__(c1, c2, n, shortcut, g, e)
+        c_ = int(c2 * e)  # hidden channels
+        self.m = nn.Sequential(*(Faster_Block(c_, c_) for _ in range(n)))
+
+
+class C2f_Faster(C2f):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(Faster_Block(self.c, self.c) for _ in range(n))
+
+
+class C2f_ESEMB(C2f):
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(MBConv(self.c, self.c, shortcut) for _ in range(n))
 
 
 class C3x(C3):

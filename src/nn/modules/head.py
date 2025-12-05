@@ -15,12 +15,12 @@ from src.utils import NOT_MACOS14
 from src.utils.tal import dist2bbox, dist2rbox, make_anchors
 from src.utils.torch_utils import TORCH_1_11, fuse_conv_and_bn, smart_inference_mode
 
-from .block import DFL, SAVPE, BNContrastiveHead, ContrastiveHead, Proto, Residual, SwiGLUFFN
+from .block import DFL, SAVPE, BNContrastiveHead, ContrastiveHead, Proto, Residual, SwiGLUFFN, CLLABlock
 from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
-__all__ = "OBB", "Classify", "Detect", "Pose", "RTDETRDecoder", "Segment", "YOLOEDetect", "YOLOESegment", "v10Detect"
+__all__ = "OBB", "Classify", "Detect", "Pose", "RTDETRDecoder", "Segment", "YOLOEDetect", "YOLOESegment", "v10Detect", "CLLADetect"
 
 
 class Detect(nn.Module):
@@ -211,6 +211,54 @@ class Detect(nn.Module):
         i = torch.arange(batch_size)[..., None]  # batch indices
         return torch.cat([boxes[i, index // nc], scores[..., None], (index % nc)[..., None].float()], dim=-1)
 
+
+class CLLADetect(Detect):
+    """
+    CLLA + YOLOv8 Detect (anchor-free)
+    完全兼容 ultralytics 的训练/推理/DFl/无 anchor 结构
+    """
+
+    def __init__(self, nc=80, ch=(), use_clla_on=0):
+        """
+        nc: 类别数
+        ch: (P3,P4,P5) 通道数
+        use_clla_on: 在哪个尺度启用 CLLA
+        """
+        super().__init__(nc=nc, ch=ch)
+
+        self.use_clla_on = use_clla_on
+        self.nl = len(ch)
+
+        # 对每一层建立 CLLABlock 或 identity
+        self.clla_blocks = nn.ModuleList([nn.Identity() for _ in range(self.nl)])
+        for i in range(self.nl):
+            if i == use_clla_on:    # 只在指定尺度启用
+                c = ch[i]
+                self.clla_blocks[i] = CLLABlock(
+                    range_=2,
+                    c_dim=c,      # 与输入通道一致
+                    ch1=c,        # 两个输入都是该层特征
+                    ch2=c,
+                    out=c
+                )
+
+        # Detect 的 cv2/cv3 会自动生成，无需改动
+        # self.cv2: box head
+        # self.cv3: class head
+
+    def forward(self, x):
+        """
+        x: [P3,P4,P5]
+        输出：保持与 YOLOv8 Detect 相同格式
+        """
+
+        # 1) 替换某个尺度的特征
+        for i in range(self.nl):
+            if not isinstance(self.clla_blocks[i], nn.Identity):
+                x[i] = self.clla_blocks[i](x[i], x[i])
+
+        # 2) 调用 YOLOv8 Detect 的 forward
+        return super().forward(x)
 
 class Segment(Detect):
     """YOLO Segment head for segmentation models.
